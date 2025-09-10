@@ -1,5 +1,4 @@
 import 'package:compra_venda_perto_casa/pages/configuracoes_page.dart';
-import 'package:compra_venda_perto_casa/pages/favoritos_page.dart';
 import 'package:compra_venda_perto_casa/pages/produtos_page.dart';
 import 'package:flutter/material.dart';
 
@@ -33,7 +32,6 @@ class _HomePageState extends State<HomePage> {
         controller: pc,
         children: [
           ProdutosPage(),
-          FavoritosPage(),
           ConfiguracoesPage(),
         ],
         onPageChanged: setPaginaAtual,
@@ -42,7 +40,6 @@ class _HomePageState extends State<HomePage> {
         currentIndex: paginaAtual,
         items: [
           BottomNavigationBarItem(icon: Icon(Icons.list), label: "Produtos"),
-          BottomNavigationBarItem(icon: Icon(Icons.star), label: "Favoritos"),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Configurações'),
         ],
         onTap: (pagina) {

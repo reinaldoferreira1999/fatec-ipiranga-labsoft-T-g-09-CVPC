@@ -1,6 +1,7 @@
 import 'package:compra_venda_perto_casa/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:compra_venda_perto_casa/routes/app_routes.dart';
 
 class LoginPage extends StatefulWidget {
   LoginPage({Key? key}) : super(key: key);
@@ -163,6 +164,15 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: () => setFormAction(!isLogin),
                   child: Text(toggleButton),
                 ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(AppRoutes.SENHA);
+                  },
+                  child: Text(
+                    'Esqueci minha senha',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ), 
               ],
             ),
           ),

@@ -34,11 +34,8 @@ class _AnunciosPageState extends State<AnunciosPage> {
   Future<String?> _uploadImagem(String anuncioId) async {
     if (_imagemSelecionada == null) return null;
 
-    final uid = FirebaseAuth.instance.currentUser!.uid;
     final storageRef = FirebaseStorage.instance
         .ref()
-        .child('usuario')
-        .child(uid)
         .child('anuncios')
         .child('$anuncioId.jpg');
 
@@ -55,31 +52,32 @@ class _AnunciosPageState extends State<AnunciosPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final produtoRef = FirebaseFirestore.instance
-        .collection('usuario')
-        .doc(uid)
-        .collection('anuncios');
+    final anunciosRef = FirebaseFirestore.instance.collection('anuncios');
+
+    final nomeOriginal = _nomeController.text.trim();
+    final nomeLower = nomeOriginal.toLowerCase();
 
     if (idProdutoEdicao == null) {
-      final codigo = gerarCodigo();
-      final docRef = await produtoRef.doc();
 
-      await docRef.set({
+      final codigo = gerarCodigo();
+      final docRef = await anunciosRef.add({
+        'nome': nomeOriginal,
+        'nomeLower': nomeLower,
+        'userId': uid,
         'codigo': codigo,
-        'nome': _nomeController.text.trim(),
         'valor': double.tryParse(_valorController.text.trim()) ?? 0,
         'descricao': _descricaoController.text.trim(),
         'criadoEm': Timestamp.now(),
-      });
+    });
 
       final url = await _uploadImagem(docRef.id);
       if (url != null) {
         await docRef.update({'imagemUrl': url});
       }
     } else {
-      // Editar existente
-      await produtoRef.doc(idProdutoEdicao).update({
-        'nome': _nomeController.text.trim(),
+      await anunciosRef.doc(idProdutoEdicao).update({
+        'nome': nomeOriginal,
+        'nomeLower': nomeLower,
         'valor': double.tryParse(_valorController.text.trim()) ?? 0,
         'descricao': _descricaoController.text.trim(),
       });
@@ -87,13 +85,12 @@ class _AnunciosPageState extends State<AnunciosPage> {
       if (_imagemSelecionada != null) {
         final url = await _uploadImagem(idProdutoEdicao!);
         if (url != null) {
-          await produtoRef.doc(idProdutoEdicao).update({'imagemUrl': url});
+          await anunciosRef.doc(idProdutoEdicao).update({'imagemUrl': url});
         }
       }
       Navigator.pop(context);
     }
 
-    // Resetar estado
     setState(() {
       idProdutoEdicao = null;
       mostrarCampoProduto = false;
@@ -102,21 +99,18 @@ class _AnunciosPageState extends State<AnunciosPage> {
     _formKey.currentState!.reset();
   }
 
-  Stream<QuerySnapshot> getProdutosStream() {
+  Stream<QuerySnapshot> getTodosAnunciosStream() {
     final uid = FirebaseAuth.instance.currentUser!.uid;
+
     return FirebaseFirestore.instance
-        .collection('usuario')
-        .doc(uid)
-        .collection('anuncios')
-        .orderBy('criadoEm', descending: true)
-        .snapshots();
+      .collection('anuncios')
+      .where('userId', isEqualTo: uid)
+      .orderBy('criadoEm', descending: true)
+      .snapshots();
   }
 
   Future<void> apagarProduto(String produtoId) async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
     await FirebaseFirestore.instance
-        .collection('usuario')
-        .doc(uid)
         .collection('anuncios')
         .doc(produtoId)
         .delete();
@@ -129,7 +123,7 @@ class _AnunciosPageState extends State<AnunciosPage> {
       _nomeController.text = dados['nome'] ?? '';
       _valorController.text = dados['valor']?.toString() ?? '';
       _descricaoController.text = dados['descricao'] ?? '';
-      _imagemSelecionada = null; // não carregamos a imagem local aqui
+      _imagemSelecionada = null; // não carregamos imagem local
     });
   }
 
@@ -215,7 +209,7 @@ class _AnunciosPageState extends State<AnunciosPage> {
             ),
             const SizedBox(height: 10),
             StreamBuilder<QuerySnapshot>(
-              stream: getProdutosStream(),
+              stream: getTodosAnunciosStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const CircularProgressIndicator();
@@ -237,7 +231,9 @@ class _AnunciosPageState extends State<AnunciosPage> {
                             ? Image.network(produto['imagemUrl'],
                                 width: 56, fit: BoxFit.cover)
                             : const Icon(Icons.image_not_supported),
-                        title: Text('${produto['codigo'] ?? ''} \n ${produto['nome'] ?? 'Sem nome'}'),
+                        title: Text(
+                          '${produto['codigo'] ?? ''}\n${produto['nome'] ?? 'Sem nome'}',
+                        ),
                         subtitle: Text(
                           'R\$ ${produto['valor']?.toStringAsFixed(2) ?? '0.00'}\n'
                           '${produto['descricao'] ?? ''}',
@@ -248,8 +244,10 @@ class _AnunciosPageState extends State<AnunciosPage> {
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => editarProduto(docs[index].id,
-                                  docs[index].data() as Map<String, dynamic>),
+                              onPressed: () => editarProduto(
+                                  docs[index].id,
+                                  docs[index].data()
+                                      as Map<String, dynamic>),
                             ),
                             IconButton(
                               icon: const Icon(Icons.close, color: Colors.red),

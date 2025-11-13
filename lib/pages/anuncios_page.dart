@@ -68,6 +68,7 @@ class _AnunciosPageState extends State<AnunciosPage> {
         'valor': double.tryParse(_valorController.text.trim()) ?? 0,
         'descricao': _descricaoController.text.trim(),
         'criadoEm': Timestamp.now(),
+        'vendido': false,
     });
 
       final url = await _uploadImagem(docRef.id);
@@ -226,35 +227,62 @@ class _AnunciosPageState extends State<AnunciosPage> {
                     final produto = docs[index].data() as Map<String, dynamic>;
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: ListTile(
-                        leading: produto['imagemUrl'] != null
-                            ? Image.network(produto['imagemUrl'],
-                                width: 56, fit: BoxFit.cover)
-                            : const Icon(Icons.image_not_supported),
-                        title: Text(
-                          '${produto['codigo'] ?? ''}\n${produto['nome'] ?? 'Sem nome'}',
-                        ),
-                        subtitle: Text(
-                          'R\$ ${produto['valor']?.toStringAsFixed(2) ?? '0.00'}\n'
-                          '${produto['descricao'] ?? ''}',
-                        ),
-                        isThreeLine: true,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => editarProduto(
-                                  docs[index].id,
-                                  docs[index].data()
-                                      as Map<String, dynamic>),
+                      child: Stack(
+                        children: [
+                          ListTile(
+                            leading: produto['imagemUrl'] != null
+                                ? Image.network(
+                                    produto['imagemUrl'],
+                                    width: 56,
+                                    height: 56,
+                                    fit: BoxFit.cover,
+                                  )
+                                : const Icon(Icons.image_not_supported),
+                            title: Text(
+                              '${produto['codigo'] ?? ''}\n${produto['nome'] ?? 'Sem nome'}',
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.close, color: Colors.red),
-                              onPressed: () => apagarProduto(docs[index].id),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'R\$ ${produto['valor']?.toStringAsFixed(2) ?? '0.00'}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(produto['descricao'] ?? ''),
+                                if (produto['vendido'] == true)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      '⚠️ Produto vendido',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ],
-                        ),
+                            isThreeLine: true,
+                            trailing: (produto['vendido'] == true)
+                                ? null // 🔒 Esconde botões se vendido
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.blue),
+                                        onPressed: () => editarProduto(
+                                          docs[index].id,
+                                          docs[index].data() as Map<String, dynamic>,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.close, color: Colors.red),
+                                        onPressed: () => apagarProduto(docs[index].id),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ],
                       ),
                     );
                   },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:compra_venda_perto_casa/routes/app_routes.dart';
 
 class ProdutosPage extends StatefulWidget {
   const ProdutosPage({super.key});
@@ -19,6 +20,7 @@ class _ProdutosPageState extends State<ProdutosPage> {
     if (_searchText.isEmpty) {
       return collection
           .where('userId', isNotEqualTo: uid)
+          .where('vendido', isEqualTo: false)
           .orderBy('userId')
           .orderBy('criadoEm', descending: true);
     } else {
@@ -94,6 +96,7 @@ class _ProdutosPageState extends State<ProdutosPage> {
                   itemBuilder: (context, index) {
                     final doc = docsFiltered[index];
                     final anuncio = doc.data() as Map<String, dynamic>;
+                    anuncio['id'] = doc.id;
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -155,6 +158,31 @@ class DetalhesAnuncioPage extends StatelessWidget {
           Text('R\$ ${(anuncio['valor'] ?? 0).toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, color: Colors.green)),
           const SizedBox(height: 20),
           Text(anuncio['descricao'] ?? '', style: const TextStyle(fontSize: 16)),
+          const SizedBox(height: 30),
+
+          Container(
+              alignment: Alignment.bottomCenter,
+              margin: EdgeInsets.only(top: 24),
+              child: ElevatedButton(
+                onPressed: () => {
+                  Navigator.of(context).pushNamed(AppRoutes.ESCOLHERENDERECO, arguments: anuncio),
+                },
+                child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.shopping_cart_checkout),
+                          Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text(
+                              'Comprar',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+
         ]),
       ),
     );

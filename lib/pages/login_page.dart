@@ -21,10 +21,19 @@ class _LoginPageState extends State<LoginPage> {
   late String toggleButton;
   bool loading = false;
 
+  bool _obscurePassword = true;
+
   @override
   void initState() {
     super.initState();
     setFormAction(true);
+  }
+
+  bool _senhaForte(String value) {
+    final regex = RegExp(
+      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$',
+    );
+    return regex.hasMatch(value);
   }
 
   setFormAction(bool acao) {
@@ -93,8 +102,14 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     keyboardType: TextInputType.emailAddress,
                     validator: (value) {
-                      if (value!.isEmpty) {
-                        return 'Informe o email corretamente!';
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Informe o email!';
+                      }
+                      final emailValido = RegExp(
+                        r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      );
+                      if (!emailValido.hasMatch(value.trim())) {
+                        return 'Informe um email válido!';
                       }
                       return null;
                     },
@@ -105,16 +120,33 @@ class _LoginPageState extends State<LoginPage> {
                       EdgeInsets.symmetric(vertical: 12.0, horizontal: 24.0),
                   child: TextFormField(
                     controller: senha,
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: 'Senha',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
                     ),
                     validator: (value) {
-                      if (value!.isEmpty) {
-                        return 'Informa sua senha!';
-                      } else if (value.length < 6) {
-                        return 'Sua senha deve ter no mínimo 6 caracteres';
+                      if (value == null || value.isEmpty) {
+                        return 'Informe sua senha!';
+                      }
+                      if (!isLogin) {
+                        if (value.length < 8) {
+                          return 'A senha deve ter pelo menos 8 caracteres.';
+                        }
+                        if (!_senhaForte(value)) {
+                          return 'Senha fraca: use maiúscula, minúscula,\n'
+                          'número e caractere especial.';
+                        }
                       }
                       return null;
                     },

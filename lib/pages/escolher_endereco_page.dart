@@ -18,7 +18,7 @@ class _EscolherEnderecoPageState extends State<EscolherEnderecoPage> {
   Stream<QuerySnapshot> _getEnderecos() {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     return FirebaseFirestore.instance
-        .collection('usuario') // ✅ sua coleção permanece igual
+        .collection('usuario')
         .doc(uid)
         .collection('enderecos')
         .snapshots();
@@ -82,7 +82,6 @@ class _EscolherEnderecoPageState extends State<EscolherEnderecoPage> {
                   onPressed: enderecoSelecionadoId == null
                       ? null
                       : () {
-                          // 🔹 Abre a tela de pagamento Pix
                           Navigator.push(
             context,
             MaterialPageRoute(

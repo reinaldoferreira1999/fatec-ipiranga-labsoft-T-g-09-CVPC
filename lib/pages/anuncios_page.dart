@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class AnunciosPage extends StatefulWidget {
   const AnunciosPage({super.key});
@@ -20,6 +22,9 @@ class _AnunciosPageState extends State<AnunciosPage> {
   final _nomeController = TextEditingController();
   final _valorController = TextEditingController();
   final _descricaoController = TextEditingController();
+  final _cepController = TextEditingController();
+  final _bairroController = TextEditingController();
+  final _cidadeController = TextEditingController();
 
   File? _imagemSelecionada;
   final ImagePicker _picker = ImagePicker();
@@ -48,6 +53,46 @@ class _AnunciosPageState extends State<AnunciosPage> {
     return 'PROD-$now';
   }
 
+  Future<void> _buscarCep() async {
+  final cep = _cepController.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+  if (cep.length != 8) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('CEP deve ter 8 dígitos numéricos')),
+    );
+    return;
+  }
+
+  try {
+    final url = Uri.parse('https://viacep.com.br/ws/$cep/json/');
+    final resp = await http.get(url);
+
+    if (resp.statusCode == 200) {
+      final dados = json.decode(resp.body);
+
+      if (dados['erro'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('CEP não encontrado')),
+        );
+        return;
+      }
+
+      setState(() {
+        _bairroController.text = dados['bairro'] ?? '';
+        _cidadeController.text = dados['localidade'] ?? '';
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro ao buscar CEP')),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Erro ao buscar CEP: $e')),
+    );
+  }
+  }
+
   Future<void> _salvarProduto() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -69,6 +114,9 @@ class _AnunciosPageState extends State<AnunciosPage> {
         'descricao': _descricaoController.text.trim(),
         'criadoEm': Timestamp.now(),
         'vendido': false,
+        'cep': _cepController.text.trim(),
+        'bairro': _bairroController.text.trim(),
+        'cidade': _cidadeController.text.trim(),
     });
 
       final url = await _uploadImagem(docRef.id);
@@ -124,6 +172,9 @@ class _AnunciosPageState extends State<AnunciosPage> {
       _nomeController.text = dados['nome'] ?? '';
       _valorController.text = dados['valor']?.toString() ?? '';
       _descricaoController.text = dados['descricao'] ?? '';
+      _cepController.text = dados['cep'] ?? '';
+      _bairroController.text = dados['bairro'] ?? '';
+      _cidadeController.text = dados['cidade'] ?? '';
       _imagemSelecionada = null; // não carregamos imagem local
     });
   }
@@ -165,6 +216,31 @@ class _AnunciosPageState extends State<AnunciosPage> {
                     campo(_nomeController, 'Nome do produto'),
                     campo(_valorController, 'Valor', isNumber: true),
                     campo(_descricaoController, 'Descrição'),
+                    campo(_cepController, 'CEP', isNumber: true),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _buscarCep,
+                        child: const Text('Buscar endereço pelo CEP'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _bairroController,
+                      decoration: const InputDecoration(
+                        labelText: 'Bairro',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _cidadeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Cidade',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     GestureDetector(
                       onTap: _selecionarImagem,

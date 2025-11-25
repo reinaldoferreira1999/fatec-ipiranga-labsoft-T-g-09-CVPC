@@ -10,8 +10,6 @@ class ConfiguracoesPage extends StatefulWidget {
   _ConfiguracoesPageState createState() => _ConfiguracoesPageState();
 }
 
-//void _onProfileButtonPressed() {}
-
 class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
   @override
   Widget build(BuildContext context) {

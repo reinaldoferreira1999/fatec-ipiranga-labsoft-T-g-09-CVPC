@@ -28,7 +28,26 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _senhaForte(String senha) {
+  // Pelo menos:
+  // - 8 caracteres
+  // - 1 maiúscula
+  // - 1 minúscula
+  // - 1 número
+  // - 1 caractere especial (qualquer caractere não alfanumérico)
+    final regex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$');
+    return regex.hasMatch(senha);
+  }
+
   registrar(String email, String senha) async {
+    if (!_senhaForte(senha)) {
+      throw AuthException(
+        'A senha deve ter pelo menos 8 caracteres, incluir\n'
+        'uma letra maiúscula, uma letra minúscula, um número\n'
+        'e um caractere especial.',
+      );
+    }
+
     try {
       await _auth.createUserWithEmailAndPassword(email: email, password: senha);
       _getUser();
@@ -37,7 +56,11 @@ class AuthService extends ChangeNotifier {
         throw AuthException('A senha é muito fraca!');
       } else if (e.code == 'email-already-in-use') {
         throw AuthException('Este email já está cadastrado');
+      } else {
+        throw AuthException('Erro ao registrar. Tente novamente.');
       }
+    } catch (e) {
+      throw AuthException('Erro ao registrar. Tente novamente.');
     }
   }
 

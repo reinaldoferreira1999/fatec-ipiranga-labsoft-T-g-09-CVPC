@@ -116,8 +116,9 @@ class _ProdutosPageState extends State<ProdutosPage> {
                             : const Icon(Icons.image_not_supported, size: 40),
                         title: Text(anuncio['nome'] ?? 'Sem nome', style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          'R\$ ${(anuncio['valor'] ?? 0).toStringAsFixed(2)}\n${anuncio['descricao'] ?? ''}',
-                          maxLines: 2,
+                          'R\$ ${(anuncio['valor'] ?? 0).toStringAsFixed(2)}\n${anuncio['descricao'] ?? ''}\n'
+                          '${anuncio['bairro'] ?? ''} - ${anuncio['cidade'] ?? ''}',
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
                         onTap: () {
@@ -143,6 +144,28 @@ class DetalhesAnuncioPage extends StatelessWidget {
   final Map<String, dynamic> anuncio;
   const DetalhesAnuncioPage({super.key, required this.anuncio});
 
+  Future<String?> _buscarNomeVendedor() async {
+    try {
+      final userId = anuncio['userId'];
+      if (userId == null) return null;
+
+      final perfilSnap = await FirebaseFirestore.instance
+          .collection('usuario')
+          .doc(userId)
+          .collection('perfil')
+          .limit(1)
+          .get();
+
+      if (perfilSnap.docs.isEmpty) return null;
+
+      final data = perfilSnap.docs.first.data();
+      return data['nome'] as String?;
+    } catch (e) {
+      debugPrint('Erro ao buscar nome do vendedor: $e');
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -159,6 +182,30 @@ class DetalhesAnuncioPage extends StatelessWidget {
           const SizedBox(height: 20),
           Text(anuncio['descricao'] ?? '', style: const TextStyle(fontSize: 16)),
           const SizedBox(height: 30),
+          FutureBuilder<String?>(
+            future: _buscarNomeVendedor(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Text('Vendedor: carregando...');
+              }
+
+              final nomeVendedor = snapshot.data ?? 'Vendedor não informado';
+              return Text(
+                'Vendedor: $nomeVendedor',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              );
+            },
+          ),
+
+            const SizedBox(height: 8),
+          if (anuncio['bairro'] != null || anuncio['cidade'] != null)
+          Text(
+            'Localização: ${anuncio['bairro'] ?? ''} - ${anuncio['cidade'] ?? ''}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
 
           Container(
               alignment: Alignment.bottomCenter,

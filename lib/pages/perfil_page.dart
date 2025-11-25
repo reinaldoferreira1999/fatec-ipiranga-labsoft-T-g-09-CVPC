@@ -15,6 +15,25 @@ class _PerfilPageState extends State<PerfilPage> {
   final _telefone = TextEditingController();
   final _email = TextEditingController();
 
+  Future<bool> _cpfJaCadastrado(String cpf) async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    final snap = await FirebaseFirestore.instance
+      .collectionGroup('perfil')
+      .where('cpf', isEqualTo: cpf)
+      .get();
+
+    if (snap.docs.isEmpty) return false;
+    if (snap.docs.length == 1) {
+      final doc = snap.docs.first;
+      final userIdDoPerfil = doc.reference.parent.parent?.id;
+      if (userIdDoPerfil == uid) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   Future<void> _salvarDadosUsuario() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
@@ -52,9 +71,18 @@ class _PerfilPageState extends State<PerfilPage> {
 
   Future<void> atualizarDados() async {
     if (_formKey.currentState!.validate()) {
+      final cpfDigitado = _cpf.text.trim();
+      final existe = await _cpfJaCadastrado(cpfDigitado);
+      if (existe) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Este CPF já está cadastrado em outra conta.')),
+        );
+        return;
+      }
       await _salvarDadosUsuario();
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Dados atualizados com sucesso!')));
+        const SnackBar(content: Text('Dados atualizados com sucesso!')),
+      );
     }
   }
 
@@ -203,7 +231,7 @@ class _PerfilPageState extends State<PerfilPage> {
                     alignment: Alignment.bottomCenter,
                     margin: EdgeInsets.only(top: 24),
                     child: ElevatedButton(
-                      onPressed: _salvarDadosUsuario,
+                      onPressed: atualizarDados,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

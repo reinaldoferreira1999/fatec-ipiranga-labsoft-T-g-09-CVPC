@@ -25,12 +25,6 @@ class _EnderecosPageState extends State<EnderecosPage> {
   final _cidadeController = TextEditingController();
   final _estadoController = TextEditingController();
 
-  /*void _toggleCampoEndereco() {
-    setState(() {
-      mostrarCampoEndereco = !mostrarCampoEndereco;
-    });
-  }*/
-
   Future<void> buscarEndereco(String cep) async {
     final uri = Uri.parse("https://viacep.com.br/ws/$cep/json/");
     final response = await http.get(uri);

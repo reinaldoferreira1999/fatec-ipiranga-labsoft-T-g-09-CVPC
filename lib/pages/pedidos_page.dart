@@ -10,6 +10,24 @@ class PedidosPage extends StatefulWidget {
 }
 
 class _PedidosPageState extends State<PedidosPage> {
+
+  Future<void> _confirmarEntrega(String pedidoId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('pedidos')
+          .doc(pedidoId)
+          .update({'status': 'Entregue'});
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Entrega confirmada com sucesso!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao confirmar entrega: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -35,14 +53,34 @@ class _PedidosPageState extends State<PedidosPage> {
           return ListView.builder(
             itemCount: pedidos.length,
             itemBuilder: (context, index) {
-              final pedido = pedidos[index].data() as Map<String, dynamic>;
-              return ListTile(
-                leading: const Icon(Icons.shopping_bag_outlined),
-                title: Text("Pedido ${pedidos[index].id}"),
-                subtitle: Text("Status: ${pedido['status']}"),
-                onTap: () {
-                  // futuramente: detalhes do pedido
-                },
+              final doc = pedidos[index];
+              final pedido = doc.data() as Map<String, dynamic>;
+
+              final descricao = pedido['descricao'] ?? 'Produto sem nome';
+              final valor = (pedido['valor'] ?? 0).toDouble();
+              final status = pedido['status'] ?? 'Sem status';
+              final jaEntregue = status.toLowerCase() == 'entregue';
+
+              return Card(
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: ListTile(
+                  leading: const Icon(Icons.shopping_bag_outlined),
+                  title: Text(descricao),
+                  subtitle: Text(
+                    'R\$ ${valor.toStringAsFixed(2)}\nStatus: $status',
+                  ),
+                  isThreeLine: true,
+                  trailing: jaEntregue
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : TextButton(
+                          onPressed: () => _confirmarEntrega(doc.id),
+                          child: const Text(
+                            'Confirmar entrega',
+                            style: TextStyle(color: Colors.green),
+                          ),
+                        ),
+                ),
               );
             },
           );

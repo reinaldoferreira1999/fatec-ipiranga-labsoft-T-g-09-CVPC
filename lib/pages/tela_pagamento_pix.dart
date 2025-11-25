@@ -22,7 +22,6 @@ class TelaPagamentoPix extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🔹 Cole aqui o seu código PIX copia-e-cola fixo gerado no banco
     const String codigoPixFixo = '00020101021126580014br.gov.bcb.pix013625eda7d3-99c4-4880-b0ec-2c8850f218145204000053039865802BR5925REINALDO FERREIRA PAES SA6009SAO PAULO622905251K9WY91EBS23Y9JPK256PT4PN6304704B';
 
     return Scaffold(
@@ -59,7 +58,6 @@ class TelaPagamentoPix extends StatelessWidget {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("Usuário não autenticado");
 
-      // 1️⃣ Cria o pedido no Firestore
       await FirebaseFirestore.instance.collection('pedidos').add({
         'userId': user.uid,
         'anuncioId': anuncioId,
@@ -70,13 +68,11 @@ class TelaPagamentoPix extends StatelessWidget {
         'criadoEm': Timestamp.now(),
       });
 
-      // 2️⃣ Atualiza o anúncio como vendido
       await FirebaseFirestore.instance
           .collection('anuncios')
           .doc(anuncioId)
           .update({'vendido': true});
 
-      // 3️⃣ Redireciona para tela de sucesso (agora com argumentos)
       if (context.mounted) {
         Navigator.pushReplacementNamed(
           context,

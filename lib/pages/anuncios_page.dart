@@ -1,11 +1,12 @@
 import 'dart:io';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class AnunciosPage extends StatefulWidget {
   const AnunciosPage({super.key});
@@ -54,43 +55,43 @@ class _AnunciosPageState extends State<AnunciosPage> {
   }
 
   Future<void> _buscarCep() async {
-  final cep = _cepController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final cep = _cepController.text.replaceAll(RegExp(r'[^0-9]'), '');
 
-  if (cep.length != 8) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('CEP deve ter 8 dígitos numéricos')),
-    );
-    return;
-  }
-
-  try {
-    final url = Uri.parse('https://viacep.com.br/ws/$cep/json/');
-    final resp = await http.get(url);
-
-    if (resp.statusCode == 200) {
-      final dados = json.decode(resp.body);
-
-      if (dados['erro'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('CEP não encontrado')),
-        );
-        return;
-      }
-
-      setState(() {
-        _bairroController.text = dados['bairro'] ?? '';
-        _cidadeController.text = dados['localidade'] ?? '';
-      });
-    } else {
+    if (cep.length != 8) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro ao buscar CEP')),
+        const SnackBar(content: Text('CEP deve ter 8 dígitos numéricos')),
+      );
+      return;
+    }
+
+    try {
+      final url = Uri.parse('https://viacep.com.br/ws/$cep/json/');
+      final resp = await http.get(url);
+
+      if (resp.statusCode == 200) {
+        final dados = json.decode(resp.body);
+
+        if (dados['erro'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('CEP não encontrado')),
+          );
+          return;
+        }
+
+        setState(() {
+          _bairroController.text = dados['bairro'] ?? '';
+          _cidadeController.text = dados['localidade'] ?? '';
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro ao buscar CEP')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao buscar CEP: $e')),
       );
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Erro ao buscar CEP: $e')),
-    );
-  }
   }
 
   Future<void> _salvarProduto() async {
@@ -103,7 +104,6 @@ class _AnunciosPageState extends State<AnunciosPage> {
     final nomeLower = nomeOriginal.toLowerCase();
 
     if (idProdutoEdicao == null) {
-
       final codigo = gerarCodigo();
       final docRef = await anunciosRef.add({
         'nome': nomeOriginal,
@@ -117,7 +117,7 @@ class _AnunciosPageState extends State<AnunciosPage> {
         'cep': _cepController.text.trim(),
         'bairro': _bairroController.text.trim(),
         'cidade': _cidadeController.text.trim(),
-    });
+      });
 
       final url = await _uploadImagem(docRef.id);
       if (url != null) {
@@ -129,12 +129,15 @@ class _AnunciosPageState extends State<AnunciosPage> {
         'nomeLower': nomeLower,
         'valor': double.tryParse(_valorController.text.trim()) ?? 0,
         'descricao': _descricaoController.text.trim(),
+        'cep': _cepController.text.trim(),
+        'bairro': _bairroController.text.trim(),
+        'cidade': _cidadeController.text.trim(),
       });
 
       if (_imagemSelecionada != null) {
         final url = await _uploadImagem(idProdutoEdicao!);
         if (url != null) {
-          await anunciosRef.doc(idProdutoEdicao).update({'imagemUrl': url});
+          await anunciosRef.doc(idProdutoEdicao!).update({'imagemUrl': url});
         }
       }
       Navigator.pop(context);
@@ -152,10 +155,10 @@ class _AnunciosPageState extends State<AnunciosPage> {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     return FirebaseFirestore.instance
-      .collection('anuncios')
-      .where('userId', isEqualTo: uid)
-      .orderBy('criadoEm', descending: true)
-      .snapshots();
+        .collection('anuncios')
+        .where('userId', isEqualTo: uid)
+        .orderBy('criadoEm', descending: true)
+        .snapshots();
   }
 
   Future<void> apagarProduto(String produtoId) async {
@@ -175,8 +178,22 @@ class _AnunciosPageState extends State<AnunciosPage> {
       _cepController.text = dados['cep'] ?? '';
       _bairroController.text = dados['bairro'] ?? '';
       _cidadeController.text = dados['cidade'] ?? '';
-      _imagemSelecionada = null; // não carregamos imagem local
+      _imagemSelecionada = null;
     });
+  }
+
+  /// 🔹 Busca o pedido mais recente para um anúncio
+  Future<Map<String, dynamic>?> _buscarUltimoPedidoDoAnuncio(
+      String anuncioId) async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('pedidos')
+        .where('anuncioId', isEqualTo: anuncioId)
+        .orderBy('criadoEm', descending: true)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) return null;
+    return snapshot.docs.first.data();
   }
 
   @override
@@ -198,14 +215,19 @@ class _AnunciosPageState extends State<AnunciosPage> {
               label: Text(
                 mostrarCampoProduto ? 'Cancelar' : 'Adicionar novo produto',
                 style: const TextStyle(
-                    color: Colors.deepPurple, fontWeight: FontWeight.w600),
+                  color: Colors.deepPurple,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.deepPurple, width: 3.5),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 60),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 16,
+                  horizontal: 60,
+                ),
               ),
             ),
             if (mostrarCampoProduto) ...[
@@ -255,8 +277,10 @@ class _AnunciosPageState extends State<AnunciosPage> {
                             ? const Center(
                                 child: Text('Toque para selecionar imagem'),
                               )
-                            : Image.file(_imagemSelecionada!,
-                                fit: BoxFit.cover),
+                            : Image.file(
+                                _imagemSelecionada!,
+                                fit: BoxFit.cover,
+                              ),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -268,8 +292,10 @@ class _AnunciosPageState extends State<AnunciosPage> {
                           Icon(Icons.save),
                           Padding(
                             padding: EdgeInsets.all(16),
-                            child:
-                                Text('Salvar', style: TextStyle(fontSize: 20)),
+                            child: Text(
+                              'Salvar',
+                              style: TextStyle(fontSize: 20),
+                            ),
                           ),
                         ],
                       ),
@@ -279,10 +305,12 @@ class _AnunciosPageState extends State<AnunciosPage> {
               ),
               const Divider(height: 30),
             ],
-            Align(
+            const Align(
               alignment: Alignment.centerLeft,
-              child:
-                  const Text('Meus Produtos:', style: TextStyle(fontSize: 18)),
+              child: Text(
+                'Meus Produtos:',
+                style: TextStyle(fontSize: 18),
+              ),
             ),
             const SizedBox(height: 10),
             StreamBuilder<QuerySnapshot>(
@@ -294,71 +322,156 @@ class _AnunciosPageState extends State<AnunciosPage> {
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return const Text('Nenhum produto cadastrado.');
                 }
+
                 final docs = snapshot.data!.docs;
+
                 return ListView.builder(
                   itemCount: docs.length,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemBuilder: (context, index) {
-                    final produto = docs[index].data() as Map<String, dynamic>;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: Stack(
-                        children: [
-                          ListTile(
-                            leading: produto['imagemUrl'] != null
-                                ? Image.network(
-                                    produto['imagemUrl'],
-                                    width: 56,
-                                    height: 56,
-                                    fit: BoxFit.cover,
-                                  )
-                                : const Icon(Icons.image_not_supported),
-                            title: Text(
-                              '${produto['codigo'] ?? ''}\n${produto['nome'] ?? 'Sem nome'}',
+                    final doc = docs[index];
+                    final produto = doc.data() as Map<String, dynamic>;
+                    final anuncioId = doc.id;
+                    final vendido = produto['vendido'] == true;
+
+
+                    double valor = 0.0;
+                    if (produto['valor'] is int) {
+                      valor = (produto['valor'] as int).toDouble();
+                    } else if (produto['valor'] is double) {
+                      valor = produto['valor'] as double;
+                    }
+
+
+                    final Widget leadingWidget = produto['imagemUrl'] != null
+                    ? Image.network(
+                      produto['imagemUrl'],
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                    )
+                    : const Icon(Icons.image_not_supported);
+
+                    final Widget titleWidget = Text(
+                      '${produto['codigo'] ?? ''}\n${produto['nome'] ?? 'Sem nome'}',
+                    );
+
+                    final List<Widget> subtitleChildren = [
+                      Text(
+                        'R\$ ${valor.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(produto['descricao'] ?? ''),
+                      if (vendido)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            '⚠️ Produto vendido',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
                             ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                        ),
+                      ];
+
+
+                    final ListTile baseTile = ListTile(
+                      leading: leadingWidget,
+                      title: titleWidget,
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: subtitleChildren,
+                      ),
+                      isThreeLine: true,
+                      trailing: vendido
+                          ? null
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  'R\$ ${produto['valor']?.toStringAsFixed(2) ?? '0.00'}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                Text(produto['descricao'] ?? ''),
-                                if (produto['vendido'] == true)
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 4),
-                                    child: Text(
-                                      '⚠️ Produto vendido',
-                                      style: TextStyle(
-                                        color: Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () => editarProduto(
+                                    anuncioId,
+                                    produto,
                                   ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.red),
+                                  onPressed: () => apagarProduto(anuncioId),
+                                ),
                               ],
                             ),
+                    );
+
+                  if (!vendido) {
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      child: baseTile,
+                    );
+                  }
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      child: FutureBuilder<Map<String, dynamic>?>(
+                        future: _buscarUltimoPedidoDoAnuncio(anuncioId),
+                        builder: (context, snapPedido) {
+                          if (snapPedido.connectionState == ConnectionState.waiting) {
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                baseTile,
+                                const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: LinearProgressIndicator(),
+                                ),
+                              ],
+                            );
+                          }
+
+                          final pedido = snapPedido.data;
+                          final compradorNome =
+                              (pedido != null && pedido['compradorNome'] != null)
+                                  ? pedido['compradorNome'] as String
+                                  : 'Comprador não identificado';
+                          final compradorTelefone =
+                              (pedido != null && pedido['compradorTelefone'] != null)
+                                  ? pedido['compradorTelefone'] as String
+                                  : 'Telefone não informado';
+                          final enderecoEntrega =
+                              (pedido != null && pedido['enderecoEntrega'] != null)
+                                  ? pedido['enderecoEntrega'] as String
+                                  : 'Endereço não disponível';
+
+                          // monta subtitle com os dados do comprador
+                          final List<Widget> soldSubtitle = [
+                            ...subtitleChildren,
+                            const SizedBox(height: 8),
+                            const Divider(),
+                            Text(
+                              'Comprador: $compradorNome',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            Text('Telefone: $compradorTelefone'),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Endereço de entrega:',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            Text(enderecoEntrega),
+                          ];
+
+                          return ListTile(
+                            leading: leadingWidget,
+                            title: titleWidget,
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: soldSubtitle,
+                            ),
                             isThreeLine: true,
-                            trailing: (produto['vendido'] == true)
-                                ? null // 🔒 Esconde botões se vendido
-                                : Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.blue),
-                                        onPressed: () => editarProduto(
-                                          docs[index].id,
-                                          docs[index].data() as Map<String, dynamic>,
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.close, color: Colors.red),
-                                        onPressed: () => apagarProduto(docs[index].id),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     );
                   },
@@ -381,7 +494,9 @@ class _AnunciosPageState extends State<AnunciosPage> {
             ? const TextInputType.numberWithOptions(decimal: true)
             : null,
         decoration: InputDecoration(
-            labelText: label, border: const OutlineInputBorder()),
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
         validator: (value) =>
             value == null || value.trim().isEmpty ? 'Campo obrigatório' : null,
       ),

@@ -1,12 +1,14 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+
 
 class AnunciosPage extends StatefulWidget {
   const AnunciosPage({super.key});
@@ -18,6 +20,8 @@ class AnunciosPage extends StatefulWidget {
 class _AnunciosPageState extends State<AnunciosPage> {
   bool mostrarCampoProduto = false;
   String? idProdutoEdicao;
+  bool _salvando = false;
+  bool _buscandoCep = false;
 
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
@@ -29,6 +33,17 @@ class _AnunciosPageState extends State<AnunciosPage> {
 
   File? _imagemSelecionada;
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _valorController.dispose();
+    _descricaoController.dispose();
+    _cepController.dispose();
+    _bairroController.dispose();
+    _cidadeController.dispose();
+    super.dispose();
+  }
 
   Future<void> _selecionarImagem() async {
     final XFile? imagem = await _picker.pickImage(source: ImageSource.gallery);
@@ -54,6 +69,11 @@ class _AnunciosPageState extends State<AnunciosPage> {
     return 'PROD-$now';
   }
 
+  double _parseValor(String texto) {
+    final normalizado = texto.trim().replaceAll(',', '.');
+    return double.tryParse(normalizado) ?? 0.0;
+  }
+
   Future<void> _buscarCep() async {
     final cep = _cepController.text.replaceAll(RegExp(r'[^0-9]'), '');
 
@@ -65,6 +85,8 @@ class _AnunciosPageState extends State<AnunciosPage> {
     }
 
     try {
+      setState(() => _buscandoCep = true);
+
       final url = Uri.parse('https://viacep.com.br/ws/$cep/json/');
       final resp = await http.get(url);
 
@@ -91,64 +113,139 @@ class _AnunciosPageState extends State<AnunciosPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao buscar CEP: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _buscandoCep = false);
+      }
     }
+  }
+
+  Future<Location?> _getLatLngFromCep() async {
+    try {
+      final cep = _cepController.text.trim();
+      final bairro = _bairroController.text.trim();
+      final cidade = _cidadeController.text.trim();
+
+      final partes = [cep, bairro, cidade, 'Brasil']
+          .where((e) => e.isNotEmpty)
+          .join(', ');
+
+      if (partes.isEmpty) return null;
+
+      final locations = await locationFromAddress(partes);
+
+      if (locations.isNotEmpty) {
+        return locations.first;
+      }
+    } catch (e) {
+      debugPrint('Erro ao converter endereço em coordenadas: $e');
+    }
+    return null;
+  }
+
+  void _limparFormulario() {
+    _formKey.currentState?.reset();
+    _nomeController.clear();
+    _valorController.clear();
+    _descricaoController.clear();
+    _cepController.clear();
+    _bairroController.clear();
+    _cidadeController.clear();
+    _imagemSelecionada = null;
+    idProdutoEdicao = null;
   }
 
   Future<void> _salvarProduto() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final anunciosRef = FirebaseFirestore.instance.collection('anuncios');
+    try {
+      setState(() => _salvando = true);
 
-    final nomeOriginal = _nomeController.text.trim();
-    final nomeLower = nomeOriginal.toLowerCase();
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final anunciosRef = FirebaseFirestore.instance.collection('anuncios');
 
-    if (idProdutoEdicao == null) {
-      final codigo = gerarCodigo();
-      final docRef = await anunciosRef.add({
-        'nome': nomeOriginal,
-        'nomeLower': nomeLower,
-        'userId': uid,
-        'codigo': codigo,
-        'valor': double.tryParse(_valorController.text.trim()) ?? 0,
-        'descricao': _descricaoController.text.trim(),
-        'criadoEm': Timestamp.now(),
-        'vendido': false,
-        'cep': _cepController.text.trim(),
-        'bairro': _bairroController.text.trim(),
-        'cidade': _cidadeController.text.trim(),
-      });
+      final nomeOriginal = _nomeController.text.trim();
+      final nomeLower = nomeOriginal.toLowerCase();
+      final valor = _parseValor(_valorController.text);
+      final descricao = _descricaoController.text.trim();
+      final cep = _cepController.text.trim();
+      final bairro = _bairroController.text.trim();
+      final cidade = _cidadeController.text.trim();
 
-      final url = await _uploadImagem(docRef.id);
-      if (url != null) {
-        await docRef.update({'imagemUrl': url});
-      }
-    } else {
-      await anunciosRef.doc(idProdutoEdicao).update({
-        'nome': nomeOriginal,
-        'nomeLower': nomeLower,
-        'valor': double.tryParse(_valorController.text.trim()) ?? 0,
-        'descricao': _descricaoController.text.trim(),
-        'cep': _cepController.text.trim(),
-        'bairro': _bairroController.text.trim(),
-        'cidade': _cidadeController.text.trim(),
-      });
+      final location = await _getLatLngFromCep();
+      final double? latitude = location?.latitude;
+      final double? longitude = location?.longitude;
 
-      if (_imagemSelecionada != null) {
-        final url = await _uploadImagem(idProdutoEdicao!);
+      if (idProdutoEdicao == null) {
+        final codigo = gerarCodigo();
+
+        final docRef = await anunciosRef.add({
+          'nome': nomeOriginal,
+          'nomeLower': nomeLower,
+          'userId': uid,
+          'codigo': codigo,
+          'valor': valor,
+          'descricao': descricao,
+          'criadoEm': FieldValue.serverTimestamp(),
+          'vendido': false,
+          'cep': cep,
+          'bairro': bairro,
+          'cidade': cidade,
+          'latitude': latitude,
+          'longitude': longitude,
+        });
+
+        final url = await _uploadImagem(docRef.id);
         if (url != null) {
-          await anunciosRef.doc(idProdutoEdicao!).update({'imagemUrl': url});
+          await docRef.update({'imagemUrl': url});
         }
-      }
-      Navigator.pop(context);
-    }
 
-    setState(() {
-      idProdutoEdicao = null;
-      mostrarCampoProduto = false;
-      _imagemSelecionada = null;
-    });
-    _formKey.currentState!.reset();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Produto cadastrado com sucesso!')),
+        );
+      } else {
+        final updateData = {
+          'nome': nomeOriginal,
+          'nomeLower': nomeLower,
+          'valor': valor,
+          'descricao': descricao,
+          'cep': cep,
+          'bairro': bairro,
+          'cidade': cidade,
+          'latitude': latitude,
+          'longitude': longitude,
+        };
+
+        await anunciosRef.doc(idProdutoEdicao!).update(updateData);
+
+        if (_imagemSelecionada != null) {
+          final url = await _uploadImagem(idProdutoEdicao!);
+          if (url != null) {
+            await anunciosRef.doc(idProdutoEdicao!).update({'imagemUrl': url});
+          }
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Produto atualizado com sucesso!')),
+        );
+      }
+
+      setState(() {
+        mostrarCampoProduto = false;
+        _limparFormulario();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao salvar produto: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _salvando = false);
+      }
+    }
   }
 
   Stream<QuerySnapshot> getTodosAnunciosStream() {
@@ -182,9 +279,9 @@ class _AnunciosPageState extends State<AnunciosPage> {
     });
   }
 
-  /// 🔹 Busca o pedido mais recente para um anúncio
   Future<Map<String, dynamic>?> _buscarUltimoPedidoDoAnuncio(
-      String anuncioId) async {
+    String anuncioId,
+  ) async {
     final snapshot = await FirebaseFirestore.instance
         .collection('pedidos')
         .where('anuncioId', isEqualTo: anuncioId)
@@ -206,7 +303,12 @@ class _AnunciosPageState extends State<AnunciosPage> {
           children: [
             OutlinedButton.icon(
               onPressed: () {
-                setState(() => mostrarCampoProduto = !mostrarCampoProduto);
+                setState(() {
+                  if (mostrarCampoProduto) {
+                    _limparFormulario();
+                  }
+                  mostrarCampoProduto = !mostrarCampoProduto;
+                });
               },
               icon: Icon(
                 mostrarCampoProduto ? Icons.close : Icons.add,
@@ -231,6 +333,7 @@ class _AnunciosPageState extends State<AnunciosPage> {
               ),
             ),
             if (mostrarCampoProduto) ...[
+              const SizedBox(height: 16),
               Form(
                 key: _formKey,
                 child: Column(
@@ -243,8 +346,12 @@ class _AnunciosPageState extends State<AnunciosPage> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _buscarCep,
-                        child: const Text('Buscar endereço pelo CEP'),
+                        onPressed: _buscandoCep ? null : _buscarCep,
+                        child: Text(
+                          _buscandoCep
+                              ? 'Buscando CEP...'
+                              : 'Buscar endereço pelo CEP',
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -285,16 +392,16 @@ class _AnunciosPageState extends State<AnunciosPage> {
                     ),
                     const SizedBox(height: 10),
                     ElevatedButton(
-                      onPressed: _salvarProduto,
+                      onPressed: _salvando ? null : _salvarProduto,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.save),
+                        children: [
+                          const Icon(Icons.save),
                           Padding(
-                            padding: EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(16),
                             child: Text(
-                              'Salvar',
-                              style: TextStyle(fontSize: 20),
+                              _salvando ? 'Salvando...' : 'Salvar',
+                              style: const TextStyle(fontSize: 20),
                             ),
                           ),
                         ],
@@ -319,6 +426,7 @@ class _AnunciosPageState extends State<AnunciosPage> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const CircularProgressIndicator();
                 }
+
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return const Text('Nenhum produto cadastrado.');
                 }
@@ -335,23 +443,23 @@ class _AnunciosPageState extends State<AnunciosPage> {
                     final anuncioId = doc.id;
                     final vendido = produto['vendido'] == true;
 
-
                     double valor = 0.0;
                     if (produto['valor'] is int) {
                       valor = (produto['valor'] as int).toDouble();
                     } else if (produto['valor'] is double) {
                       valor = produto['valor'] as double;
+                    } else if (produto['valor'] is String) {
+                      valor = double.tryParse(produto['valor']) ?? 0.0;
                     }
 
-
                     final Widget leadingWidget = produto['imagemUrl'] != null
-                    ? Image.network(
-                      produto['imagemUrl'],
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                    )
-                    : const Icon(Icons.image_not_supported);
+                        ? Image.network(
+                            produto['imagemUrl'],
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                          )
+                        : const Icon(Icons.image_not_supported);
 
                     final Widget titleWidget = Text(
                       '${produto['codigo'] ?? ''}\n${produto['nome'] ?? 'Sem nome'}',
@@ -363,6 +471,11 @@ class _AnunciosPageState extends State<AnunciosPage> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       Text(produto['descricao'] ?? ''),
+                      if ((produto['bairro'] ?? '').toString().isNotEmpty ||
+                          (produto['cidade'] ?? '').toString().isNotEmpty)
+                        Text(
+                          '${produto['bairro'] ?? ''} - ${produto['cidade'] ?? ''}',
+                        ),
                       if (vendido)
                         const Padding(
                           padding: EdgeInsets.only(top: 4),
@@ -374,8 +487,7 @@ class _AnunciosPageState extends State<AnunciosPage> {
                             ),
                           ),
                         ),
-                      ];
-
+                    ];
 
                     final ListTile baseTile = ListTile(
                       leading: leadingWidget,
@@ -391,33 +503,40 @@ class _AnunciosPageState extends State<AnunciosPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.blue,
+                                  ),
                                   onPressed: () => editarProduto(
                                     anuncioId,
                                     produto,
                                   ),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.red),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.red,
+                                  ),
                                   onPressed: () => apagarProduto(anuncioId),
                                 ),
                               ],
                             ),
                     );
 
-                  if (!vendido) {
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: baseTile,
-                    );
-                  }
+                    if (!vendido) {
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        child: baseTile,
+                      );
+                    }
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       child: FutureBuilder<Map<String, dynamic>?>(
                         future: _buscarUltimoPedidoDoAnuncio(anuncioId),
                         builder: (context, snapPedido) {
-                          if (snapPedido.connectionState == ConnectionState.waiting) {
+                          if (snapPedido.connectionState ==
+                              ConnectionState.waiting) {
                             return Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -432,26 +551,32 @@ class _AnunciosPageState extends State<AnunciosPage> {
 
                           final pedido = snapPedido.data;
                           final compradorNome =
-                              (pedido != null && pedido['compradorNome'] != null)
+                              (pedido != null &&
+                                      pedido['compradorNome'] != null)
                                   ? pedido['compradorNome'] as String
                                   : 'Comprador não identificado';
+
                           final compradorTelefone =
-                              (pedido != null && pedido['compradorTelefone'] != null)
+                              (pedido != null &&
+                                      pedido['compradorTelefone'] != null)
                                   ? pedido['compradorTelefone'] as String
                                   : 'Telefone não informado';
+
                           final enderecoEntrega =
-                              (pedido != null && pedido['enderecoEntrega'] != null)
+                              (pedido != null &&
+                                      pedido['enderecoEntrega'] != null)
                                   ? pedido['enderecoEntrega'] as String
                                   : 'Endereço não disponível';
 
-                          // monta subtitle com os dados do comprador
                           final List<Widget> soldSubtitle = [
                             ...subtitleChildren,
                             const SizedBox(height: 8),
                             const Divider(),
                             Text(
                               'Comprador: $compradorNome',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             Text('Telefone: $compradorTelefone'),
                             const SizedBox(height: 4),
@@ -484,8 +609,11 @@ class _AnunciosPageState extends State<AnunciosPage> {
     );
   }
 
-  Widget campo(TextEditingController controller, String label,
-      {bool isNumber = false}) {
+  Widget campo(
+    TextEditingController controller,
+    String label, {
+    bool isNumber = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: TextFormField(
@@ -497,8 +625,20 @@ class _AnunciosPageState extends State<AnunciosPage> {
           labelText: label,
           border: const OutlineInputBorder(),
         ),
-        validator: (value) =>
-            value == null || value.trim().isEmpty ? 'Campo obrigatório' : null,
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            return 'Campo obrigatório';
+          }
+
+          if (label == 'Valor') {
+            final valor = value.trim().replaceAll(',', '.');
+            if (double.tryParse(valor) == null) {
+              return 'Digite um valor válido';
+            }
+          }
+
+          return null;
+        },
       ),
     );
   }

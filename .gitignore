@@ -49,3 +49,6 @@ lib/firebase_options.dart
 *.pub
 *.pem
 *.key
+
+# FVM Version Cache
+.fvm/

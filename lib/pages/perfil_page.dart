@@ -14,14 +14,15 @@ class _PerfilPageState extends State<PerfilPage> {
   final _cpf = TextEditingController();
   final _telefone = TextEditingController();
   final _email = TextEditingController();
+  final _pix = TextEditingController();
 
   Future<bool> _cpfJaCadastrado(String cpf) async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     final snap = await FirebaseFirestore.instance
-      .collectionGroup('perfil')
-      .where('cpf', isEqualTo: cpf)
-      .get();
+        .collectionGroup('perfil')
+        .where('cpf', isEqualTo: cpf)
+        .get();
 
     if (snap.docs.isEmpty) return false;
     if (snap.docs.length == 1) {
@@ -47,6 +48,7 @@ class _PerfilPageState extends State<PerfilPage> {
       'cpf': _cpf.text,
       'telefone': _telefone.text,
       'email': _email.text,
+      'pix': _pix.text,
     });
     Navigator.pop(context);
   }
@@ -65,6 +67,7 @@ class _PerfilPageState extends State<PerfilPage> {
         _cpf.text = doc.data()?['cpf'] ?? '';
         _telefone.text = doc.data()?['telefone'] ?? '';
         _email.text = doc.data()?['email'] ?? '';
+        _pix.text = doc.data()?['pix'] ?? '';
       }
     }
   }
@@ -75,7 +78,8 @@ class _PerfilPageState extends State<PerfilPage> {
       final existe = await _cpfJaCadastrado(cpfDigitado);
       if (existe) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Este CPF já está cadastrado em outra conta.')),
+          const SnackBar(
+              content: Text('Este CPF já está cadastrado em outra conta.')),
         );
         return;
       }
@@ -135,7 +139,7 @@ class _PerfilPageState extends State<PerfilPage> {
                       ),
                     ),
                     validator: (String? value) {
-                      if (value == null) {
+                      if (value == null || value.trim().isEmpty) {
                         return "O nome não pode ser vazio";
                       }
                       if (value.length < 5) {
@@ -226,7 +230,19 @@ class _PerfilPageState extends State<PerfilPage> {
                       fontSize: 20,
                     ),
                   ),
-
+                  TextFormField(
+                    controller: _pix,
+                    autofocus: true,
+                    keyboardType: TextInputType.name,
+                    decoration: InputDecoration(
+                      labelText: "Chave PIX",
+                      labelStyle: TextStyle(
+                        color: Colors.black38,
+                        fontWeight: FontWeight.w400,
+                        fontSize: 20,
+                      ),
+                    ),
+                  ),
                   Container(
                     alignment: Alignment.bottomCenter,
                     margin: EdgeInsets.only(top: 24),

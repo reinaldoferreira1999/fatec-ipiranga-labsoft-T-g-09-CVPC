@@ -69,7 +69,8 @@ class PedidosAdminPage extends StatelessWidget {
               final status = pedido['status'] ?? 'aguardando_pagamento';
               final Timestamp timestamp = pedido['criadoEm'];
               final DateTime dataHora = timestamp.toDate();
-              final horaPedido = DateFormat('dd/MM/yyyy HH:mm').format(dataHora);
+              final horaPedido =
+                  DateFormat('dd/MM/yyyy HH:mm').format(dataHora);
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -78,7 +79,6 @@ class PedidosAdminPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-
                       Text(
                         'Pedido: $pedidoId',
                         style: const TextStyle(
@@ -104,9 +104,9 @@ class PedidosAdminPage extends StatelessWidget {
                       ),
 
                       const Divider(),
-                      
+
                       Text('Comprador: $compradorNome'),
-                      
+
                       Text('Vendedor: $vendedorNome'),
 
                       Text('Chave PIX: $vendedorPix'),
@@ -127,20 +127,19 @@ class PedidosAdminPage extends StatelessWidget {
                                 onPressed: () async {
                                   try {
                                     await FirebaseFirestore.instance
-                                      .collection('anuncios')
-                                      .doc(anuncioId)
-                                      .update({
-                                        'vendido': true,
-                                        'reservado': false,
-                                      });
+                                        .collection('anuncios')
+                                        .doc(anuncioId)
+                                        .update({
+                                      'vendido': true,
+                                      'reservado': false,
+                                    });
 
                                     await FirebaseFirestore.instance
-                                      .collection('pedidos')
-                                      .doc(pedidoId)
-                                      .update({
-                                        'status': 'aprovado',
-                                      });
-
+                                        .collection('pedidos')
+                                        .doc(pedidoId)
+                                        .update({
+                                      'status': 'aprovado',
+                                    });
                                   } catch (e) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('Erro: $e')),
@@ -150,9 +149,7 @@ class PedidosAdminPage extends StatelessWidget {
                                 child: const Text('Aprovar'),
                               ),
                             ),
-
                             const SizedBox(width: 10),
-
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
@@ -161,19 +158,19 @@ class PedidosAdminPage extends StatelessWidget {
                                 onPressed: () async {
                                   try {
                                     await FirebaseFirestore.instance
-                                      .collection('anuncios')
-                                      .doc(anuncioId)
-                                      .update({
-                                        'reservado': false,
-                                        'vendido': false,
-                                      });
+                                        .collection('anuncios')
+                                        .doc(anuncioId)
+                                        .update({
+                                      'reservado': false,
+                                      'vendido': false,
+                                    });
 
                                     await FirebaseFirestore.instance
-                                      .collection('pedidos')
-                                      .doc(pedidoId)
-                                      .update({
-                                        'status': 'recusado',
-                                      });
+                                        .collection('pedidos')
+                                        .doc(pedidoId)
+                                        .update({
+                                      'status': 'recusado',
+                                    });
                                   } catch (e) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('Erro: $e')),
